@@ -1,0 +1,86 @@
+# ───────────────────────────────────────────────────────────────
+# 1) Connect interactively (app registration needs Group.Read.All)
+# ───────────────────────────────────────────────────────────────
+$adminUrl = "https://romanteks-admin.sharepoint.com"
+$clientId = "f135dcd8-4464-4891-9b47-e8327719b434"
+
+Connect-PnPOnline -Url $adminUrl -ClientId $clientId -Interactive
+
+# ───────────────────────────────────────────────────────────────
+# 2) Get Microsoft Graph token
+# ───────────────────────────────────────────────────────────────
+$token = Get-PnPAccessToken -ResourceTypeName Graph
+
+# ───────────────────────────────────────────────────────────────
+# 3) Helper – returns Public | Private | HiddenMembership
+# ───────────────────────────────────────────────────────────────
+function Get-GroupVisibilityFromGraph {
+    param (
+        [Parameter(Mandatory)][string]$GroupId,
+        [Parameter(Mandatory)][string]$Token
+    )
+
+    $uri     = "https://graph.microsoft.com/v1.0/groups/$GroupId"
+    $headers = @{ Authorization = "Bearer $Token" }
+
+    try {
+        (Invoke-RestMethod -Uri $uri -Headers $headers -Method GET).visibility
+    }
+    catch {
+        Write-Warning ("⚠️  Could not get visibility for {0}: {1}" -f $GroupId, $_.Exception.Message)
+        return "Unknown"
+    }
+}
+
+# ───────────────────────────────────────────────────────────────
+# 4) Enumerate sites – show Visibility + SharingCapability
+# ───────────────────────────────────────────────────────────────
+$sites = Get-PnPTenantSite
+
+foreach ($site in $sites) {
+
+    # → Group visibility colour‑coding (modern sites)
+    if ($site.GroupId -ne [Guid]::Empty) {
+        $visibility = Get-GroupVisibilityFromGraph -GroupId $site.GroupId -Token $token
+
+        switch ($visibility) {
+            'Public'  { Write-Host "🔍 Site: $($site.Url) | Group Visibility: $visibility" -ForegroundColor Red }
+            'Private' { Write-Host "🔍 Site: $($site.Url) | Group Visibility: $visibility" -ForegroundColor Green }
+            default   { Write-Host "🔍 Site: $($site.Url) | Group Visibility: $visibility" }
+        }
+    }
+    else {
+        Write-Host "🏛 Classic Site: $($site.Url) (No Microsoft 365 Group)"
+    }
+
+    # → External‑sharing colour‑coding
+    switch ($site.SharingCapability) {
+        'ExternalUserAndGuestSharing' {
+            Write-Host "🌐 Sharing: $($site.SharingCapability)" -ForegroundColor Red
+        }
+        'ExternalUserSharingOnly' {
+            Write-Host "🌐 Sharing: $($site.SharingCapability)" -ForegroundColor Yellow
+        }
+        default {
+            Write-Host "🌐 Sharing: $($site.SharingCapability)"
+        }
+    }
+
+    Write-Host ""  # blank line between sites
+}
+
+# ───────────────────────────────────────────────────────────────
+# 5) Optional CSV export block – uncomment if needed
+# ───────────────────────────────────────────────────────────────
+<# 
+$report = foreach ($site in $sites) {
+    [pscustomobject]@{
+        Url              = $site.Url
+        SharingCapability= $site.SharingCapability
+        GroupVisibility  = if ($site.GroupId -ne [Guid]::Empty) {
+                               Get-GroupVisibilityFromGraph -GroupId $site.GroupId -Token $token
+                           } else { 'Classic' }
+    }
+}
+$report | Export-Csv -NoTypeInformation .\SiteVisibilityAndSharing.csv
+#>
