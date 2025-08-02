@@ -1,8 +1,8 @@
 # ───────────────────────────────────────────────────────────────
 # 1) Connect interactively (app registration needs Group.Read.All)
 # ───────────────────────────────────────────────────────────────
-$adminUrl = "https://romanteks-admin.sharepoint.com"
-$clientId = "f135dcd8-4464-4891-9b47-e8327719b434"
+$adminUrl = "https://SharePointSite-admin.sharepoint.com"
+$clientId = "ClientIDHere"
 
 Connect-PnPOnline -Url $adminUrl -ClientId $clientId -Interactive
 
